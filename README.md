@@ -1,7 +1,7 @@
 # obs-qsv-onevpl
-## Intel QSV encoder plugin for OBS Studio based on oneVPL library
+## Intel QSV encoder plugin for OBS Studio based on libVPL library
 
-### Implementation of the QSV (Quick Sync Video) video encoder plugin for OBS Studio based on the Intel oneVPL library for Intel ARC Alchemist graphics cards and above, as well as integrated UHD graphics 7** and above.
+### obq-qsvonevpl is a plugin for OBS Studio (30 and higher). The plugin is an implementation of a video encoder plugin for online broadcasts and local video recordings using Intel graphics adapters (UHD 700, Arc Alchemist, Arc Battlemage) using the LibVPL library. The plugin offers advanced encoder settings to achieve maximum video quality compared to the standard plugin built into OBS Studio.
 
 **Download:**
 
