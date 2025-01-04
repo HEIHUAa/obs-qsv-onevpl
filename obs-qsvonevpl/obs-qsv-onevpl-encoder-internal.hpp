@@ -89,23 +89,23 @@ protected:
   }
 
 private:
-  mfxPlatform QSVPlatform;
+  mfxPlatform QSVPlatform{};
   mfxVersion QSVVersion;
-  mfxLoader QSVLoader;
-  mfxConfig QSVLoaderConfig[8];
-  mfxVariant QSVLoaderVariant[8];
-  mfxSession QSVSession;
+  mfxLoader QSVLoader{};
+  mfxConfig QSVLoaderConfig[8]{};
+  mfxVariant QSVLoaderVariant[8]{};
+  mfxSession QSVSession{};
   mfxIMPL QSVImpl;
 #if defined(__linux__)
   void *QSVSessionData;
 #endif
 
-  mfxFrameSurface1 *QSVEncodeSurface;
+  mfxFrameSurface1 *QSVEncodeSurface{};
 
-  mfxFrameSurface1 *QSVProcessingSurface;
+  mfxFrameSurface1 *QSVProcessingSurface{};
 
-  std::unique_ptr<MFXVideoENCODE> QSVEncode;
-  std::unique_ptr<MFXVideoVPP> QSVProcessing;
+  std::unique_ptr<MFXVideoENCODE> QSVEncode{};
+  std::unique_ptr<MFXVideoVPP> QSVProcessing{};
 
   mfxU8 QSVVPSBuffer[1024];
   mfxU8 QSVSPSBuffer[1024];
@@ -119,22 +119,29 @@ private:
   std::vector<struct Task> QSVTaskPool;
   int QSVSyncTaskID;
 
-  mfxVideoParam QSVResetParams;
+  mfxVideoParam QSVResetParams{};
   bool QSVResetParamsChanged;
 
-  MFXVideoParam QSVEncodeParams;
-  MFXVideoParam QSVProcessingParams;
-  MFXEncodeCtrl QSVEncodeCtrlParams;
+  MFXVideoParam QSVEncodeParams{};
+  MFXVideoParam QSVProcessingParams{};
+  MFXEncodeCtrl QSVEncodeCtrlParams{};
 
+  mfxExtVppAuxData* QSVProcessingAuxData;
+  
   mfxFrameAllocRequest QSVAllocateRequest;
 
   bool QSVIsTextureEncoder;
-  mfxMemoryInterface *QSVMemoryInterface;
+  mfxMemoryInterface *QSVMemoryInterface{};
 
-  std::unique_ptr<class HWManager> HWManager;
+  std::unique_ptr<class HWManager> HWManager{};
 
   bool QSVProcessingEnable;
 
+  mfxU32 QSVEncodeRefCount;
+  mfxU32 QSVProcessingRefCount;
+
+  mfxSyncPoint QSVProcessingSyncPoint;
+  
   enum class AdditionalFourCC {
     MFX_FOURCC_IMC3 = MFX_MAKEFOURCC('I', 'M', 'C', '3'),
     MFX_FOURCC_YUV400 = MFX_MAKEFOURCC('4', '0', '0', 'P'),

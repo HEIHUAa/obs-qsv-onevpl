@@ -56,6 +56,9 @@
 #ifndef __MFXEXT_BUFFERS_H__
 #include <vpl/private/mfxddi.h>
 #endif
+#ifndef __MFXPLUGIN_H__
+#include <vpl/private/mfxplugin.h>
+#endif
 
 template <class T> struct MFXExtBufferID {};
 
@@ -220,6 +223,12 @@ template <> struct MFXExtBufferID<mfxExtEncoderResetOption> {
 };
 template <> struct MFXExtBufferID<mfxExtVppAuxData> {
   enum { id = MFX_EXTBUFF_VPP_AUXDATA };
+};
+template <> struct MFXExtBufferID<mfxExtVPPAIFrameInterpolation> {
+  enum { id = MFX_EXTBUFF_VPP_AI_FRAME_INTERPOLATION };
+};
+template <> struct MFXExtBufferID<mfxExtVPPAISuperResolution> {
+  enum { id = MFX_EXTBUFF_VPP_AI_SUPER_RESOLUTION };
 };
 
 #ifdef ONEVPL_EXPERIMENTAL

@@ -158,18 +158,16 @@ mfxStatus HWManager::AllocateTexturePool(MFXVideoParam &EncodeParams) {
   Desc.MiscFlags = D3D11_RESOURCE_MISC_SHARED;
 
   ID3D11Texture2D *Texture2D = nullptr;
-  // Create textures
-  HWTexturePool.reserve(static_cast<size_t>(
-      static_cast<int>(std::ceil(EncodeParams.mfx.FrameInfo.FrameRateExtN /
-                            EncodeParams.mfx.FrameInfo.FrameRateExtD))));
 
-  for (size_t i = 0;
-       i < static_cast<size_t>(static_cast<int>(std::ceil(
-                                   EncodeParams.mfx.FrameInfo.FrameRateExtN /
-                                   EncodeParams.mfx.FrameInfo.FrameRateExtD)) *
-                                   2 +
-                               100);
-       i++) {
+  size_t Texture2DPoolSize = static_cast<size_t>(
+      static_cast<int>((std::ceil(EncodeParams.mfx.FrameInfo.FrameRateExtN /
+                                 EncodeParams.mfx.FrameInfo.FrameRateExtD)) +
+      EncodeParams.AsyncDepth) * 2);
+
+  // Create textures
+  HWTexturePool.reserve(Texture2DPoolSize);
+
+  for (size_t i = 0; i < Texture2DPoolSize; i++) {
     HR = HWDevice->CreateTexture2D(&Desc, nullptr, &Texture2D);
 
     if (FAILED(HR)) {

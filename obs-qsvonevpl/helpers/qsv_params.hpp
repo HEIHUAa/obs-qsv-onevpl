@@ -42,8 +42,6 @@ struct encoder_params {
   mfxU16 MaxPicAverageLightLevel;
   mfxU16 IntraRefCycleSize;
   mfxU16 CTU;
-  mfxU16 WinBRCMaxAvgSize;
-  mfxU16 WinBRCSize;
   mfxU16 NumRefFrame;
   mfxU16 DenoiseStrength;
 
@@ -80,6 +78,7 @@ struct encoder_params {
   bool Lowpower;
   bool PercEncPrefilter;
   bool ProcessingEnable;
+  bool ColorConversion;
 
   std::optional<int> Trellis;
   std::optional<int> VPPDenoiseMode;

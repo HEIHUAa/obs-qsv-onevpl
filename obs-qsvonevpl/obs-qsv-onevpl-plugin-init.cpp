@@ -22,7 +22,7 @@ static void SetDefaultEncoderParams(obs_data_t *Settings,
   obs_data_set_default_int(Settings, "qpb", 23);
   obs_data_set_default_int(Settings, "icq_quality", 23);
 
-  obs_data_set_default_int(Settings, "keyint_sec", 4);
+  obs_data_set_default_int(Settings, "keyint_sec", 2);
   obs_data_set_default_int(Settings, "gop_ref_dist", 4);
   obs_data_set_default_int(Settings, "async_depth", 4);
 
@@ -120,10 +120,6 @@ static bool ParamsVisibilityModifier(obs_properties_t *Properties,
   obs_property_set_visible(Prop, bVisible);
   Prop = obs_properties_get(Properties, "extbrc");
   obs_property_set_visible(Prop, bVisible);
-  Prop = obs_properties_get(Properties, "win_brc_max_avg_size");
-  obs_property_set_visible(Prop, bVisible);
-  Prop = obs_properties_get(Properties, "win_brc_size");
-  obs_property_set_visible(Prop, bVisible);
 
   const char *lookahead = obs_data_get_string(Settings, "lookahead");
 
@@ -139,9 +135,9 @@ static bool ParamsVisibilityModifier(obs_properties_t *Properties,
     obs_property_set_visible(
         Prop, ((bVisible_lookahead_hq || bVisible_lookahead_lp) && bVisible));
 
-    if ((bVisible_lookahead_hq /* || bLAOptVisibleLP*/)) {
-      obs_data_set_string(Settings, "extbrc", "OFF");
-    }
+    //if ((bVisible_lookahead_hq /* || bLAOptVisibleLP*/)) {
+    //  obs_data_set_string(Settings, "extbrc", "OFF");
+    //}
 
     Prop = obs_properties_get(Properties, "lookahead_latency");
     obs_property_set_visible(Prop, (bVisible_lookahead_hq && bVisible));
@@ -153,17 +149,6 @@ static bool ParamsVisibilityModifier(obs_properties_t *Properties,
     if (bVisible_lookahead_lp) {
       obs_data_set_string(Settings, "enctools", "OFF");
     }
-  }
-  bVisible = std::strcmp(rate_control, "VBR") == 0 ||
-             std::strcmp(rate_control, "CBR") == 0;
-  Prop = obs_properties_get(Properties, "win_brc_max_avg_size");
-  obs_property_set_visible(Prop, bVisible);
-  Prop = obs_properties_get(Properties, "win_brc_size");
-  obs_property_set_visible(Prop, bVisible);
-
-  if (!bVisible) {
-    obs_data_erase(Settings, "win_brc_max_avg_size");
-    obs_data_erase(Settings, "win_brc_size");
   }
 
   bVisible = std::strcmp(rate_control, "CBR") == 0 ||
@@ -334,27 +319,6 @@ static obs_properties_t *GetParamProps(enum codec_enum Codec) {
   Prop = obs_properties_add_int(Props, "max_bitrate", TEXT_MAX_BITRATE, 50,
                                 10000000, 50);
   obs_property_int_set_suffix(Prop, " Kbps");
-
-  Prop = obs_properties_add_int(Props, "win_brc_max_avg_size",
-                                TEXT_WINBRC_MAX_AVG_SIZE, 0, 10000000, 50);
-  obs_property_set_long_description(
-      Prop,
-      obs_module_text(
-          "Parameter specifies the maximum bitrate averaged over a sliding "
-          "window specified by WinBRCSize.\n For H.264(AVC), H.265(HEVC) "
-          "Codecs, it is recommended to set the value to (Bitrate * 1.3). "
-          "\nFor "
-          "the AV1 Codec, the recommended value is (Bitrate * 1.2)"));
-  obs_property_int_set_suffix(Prop, " Kbps");
-
-  Prop = obs_properties_add_int(Props, "win_brc_size", TEXT_WINBRC_SIZE, 60,
-                                10000, 1);
-  obs_property_set_long_description(
-      Prop, obs_module_text(
-                "Parameter specifies the size of the sliding window in "
-                "frames for bitrate control. \nIt is recommended to set it "
-                "equal to the value of the final FPS of the video (FPSNum / "
-                "FPSDen). \nSet 0 for disable sliding window."));
 
   obs_properties_add_int(Props, "cqp", "CQP", 1,
                          Codec == QSV_CODEC_AV1 ? 63 : 51, 1);
@@ -721,10 +685,6 @@ static void GetEncoderParams(plugin_context *Context, obs_data_t *Settings) {
   const char *AdaptiveLTRData = obs_data_get_string(Settings, "adaptive_ltr");
   const char *LowPowerData = obs_data_get_string(Settings, "low_power");
   const char *UseRawRefData = obs_data_get_string(Settings, "use_raw_ref");
-  int WinBRCMaxAvgSizeData =
-      static_cast<int>(obs_data_get_int(Settings, "win_brc_max_avg_size"));
-  int WinBRCSizeData =
-      static_cast<int>(obs_data_get_int(Settings, "win_brc_size"));
   const char *RDOData = obs_data_get_string(Settings, "rdo");
   const char *TrellisData = obs_data_get_string(Settings, "trellis");
   int NumRefFrameData =
@@ -1213,9 +1173,6 @@ static void GetEncoderParams(plugin_context *Context, obs_data_t *Settings) {
       static_cast<mfxU16>(NumRefActiveBL0Data);
   Context->EncoderParams.NumRefActiveBL1 =
       static_cast<mfxU16>(NumRefActiveBL1Data);
-  Context->EncoderParams.WinBRCMaxAvgSize =
-      static_cast<mfxU16>(WinBRCMaxAvgSizeData / 100);
-  Context->EncoderParams.WinBRCSize = static_cast<mfxU16>(WinBRCSizeData);
 
   Context->EncoderParams.IntraRefCycleSize =
       static_cast<mfxU16>(IntraRefCycleSizeData);
@@ -1239,7 +1196,6 @@ static void GetEncoderParams(plugin_context *Context, obs_data_t *Settings) {
   switch (VOI->format) {
   default:
   case VIDEO_FORMAT_NV12:
-  case VIDEO_FORMAT_I420:
     Context->EncoderParams.FourCC = MFX_FOURCC_NV12;
     Context->EncoderParams.ChromaFormat = MFX_CHROMAFORMAT_YUV420;
     break;
@@ -1248,6 +1204,7 @@ static void GetEncoderParams(plugin_context *Context, obs_data_t *Settings) {
     Context->EncoderParams.ChromaFormat = MFX_CHROMAFORMAT_YUV420;
     break;
   }
+
   info("\tDebug info:");
   info("\tCodec: %s", Codec);
   info("\tRate control: %s\n", RateControlData);
