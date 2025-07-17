@@ -1,3 +1,5 @@
+# [Plugin development is on hold. More details can be found here.](https://github.com/ma3uk/obs-qsv-onevpl/issues/38)
+
 # obs-qsv-onevpl
 ## Intel QSV encoder plugin for OBS Studio based on libVPL library
 
