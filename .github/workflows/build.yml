@@ -46,7 +46,7 @@ jobs:
 
       - name: Configure OBS Studio
         run: |
-          cmake -B obs-build -G "Visual Studio 17 2022" -A x64 `
+          cmake -S obs-src -B obs-build -G "Visual Studio 17 2022" -A x64 `
             -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} `
             -DCMAKE_PREFIX_PATH="$env:OBS_DEPS_DIR" `
             -DBUILD_TESTS=OFF `
@@ -70,14 +70,17 @@ jobs:
         run: |
           cmake --install obs-build --config ${{ env.BUILD_TYPE }} --prefix obs-install
 
-      - name: Check obs-install structure
+      - name: Check obs-build for cmake config
         run: |
-          echo "=== Checking obs-install directory ==="
-          Get-ChildItem -Path obs-install -Recurse -Directory | Select-Object -First 30 FullName
-          echo "=== Looking for cmake files in obs-install ==="
-          Get-ChildItem -Path obs-install -Recurse -Filter "*.cmake" | Select-Object FullName
-          echo "=== Looking for libobs cmake files ==="
-          Get-ChildItem -Path obs-install -Recurse -Filter "*libobs*.cmake" | Select-Object FullName
+          echo "=== Looking for cmake files in obs-build ==="
+          Get-ChildItem -Path obs-build -Recurse -Filter "libobs*.cmake" -ErrorAction SilentlyContinue | Select-Object FullName
+          Get-ChildItem -Path obs-build -Recurse -Filter "OBS*.cmake" -ErrorAction SilentlyContinue | Select-Object FullName
+          echo "=== Looking for cmake config in obs-build/libobs ==="
+          if (Test-Path obs-build/libobs) {
+            Get-ChildItem -Path obs-build/libobs -Recurse -Filter "*.cmake" -ErrorAction SilentlyContinue | Select-Object FullName
+          }
+          echo "=== obs-install contents ==="
+          Get-ChildItem -Path obs-install -Recurse -Depth 3 -ErrorAction SilentlyContinue | Select-Object FullName
 
       - name: Configure Plugin
         run: |
