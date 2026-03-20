@@ -1,0 +1,80 @@
+name: Build
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+env:
+  BUILD_TYPE: RelWithDebInfo
+  VPL_VERSION: v2.12.0
+
+jobs:
+  build-windows:
+    name: Windows x64
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Setup MSVC
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Clone oneVPL
+        run: |
+          if (Test-Path libvpl) { Remove-Item libvpl -Recurse -Force }
+          git clone --depth 1 --branch ${{ env.VPL_VERSION }} https://github.com/oneapi-src/oneVPL.git libvpl
+
+      - name: Configure CMake
+        run: |
+          cmake -B build -G "Visual Studio 17 2022" -A x64 `
+            -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} `
+            -DBUILD_TOOLS=OFF `
+            -DBUILD_TESTS=OFF `
+            -DBUILD_EXAMPLES=OFF `
+            -DENABLE_LOGS=OFF `
+            -DENABLE_VPL_RUNTIME=ON `
+            -DONEVPL_EXPERIMENTAL=ON `
+            -DBUILD_DISPATCHER=OFF
+
+      - name: Build
+        run: cmake --build build --config ${{ env.BUILD_TYPE }} --parallel
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: obs-qsvonevpl-windows-x64
+          path: build/obs-qsvonevpl/RelWithDebInfo/obs-qsvonevpl.dll
+          retention-days: 14
+
+  build-linux:
+    name: Linux x64
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake libobs-dev libd3d11-dev dxgi-dev libpulse-dev
+
+      - name: Configure CMake
+        run: cmake -B build -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }}
+
+      - name: Build
+        run: cmake --build build --parallel
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: obs-qsvonevpl-linux-x64
+          path: build/obs-qsvonevpl/*.so
+          retention-days: 14
