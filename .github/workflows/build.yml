@@ -28,7 +28,7 @@ jobs:
 
       - name: Download OBS dependencies
         run: |
-          $depsUrl = "https://obsproject.com/downloads/dependencies2022-x64.zip"
+          $depsUrl = "https://github.com/obsproject/obs-deps/releases/download/2025-08-23/windows-deps-2025-08-23-x64.zip"
           Invoke-WebRequest -Uri $depsUrl -OutFile obs-deps.zip
           Expand-Archive -Path obs-deps.zip -DestinationPath .deps -Force
 
