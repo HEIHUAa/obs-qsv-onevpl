@@ -37,6 +37,10 @@ jobs:
           echo "OBS_DEPS_DIR=$PWD/.deps" | Out-File -FilePath $env:GITHUB_ENV -Encoding UTF8 -Append
           echo "CMAKE_PREFIX_PATH=$PWD/.deps" | Out-File -FilePath $env:GITHUB_ENV -Encoding UTF8 -Append
 
+      - name: Clone oneVPL
+        run: |
+          git clone --depth 1 --branch ${{ env.VPL_VERSION }} https://github.com/oneapi-src/oneVPL.git libvpl
+
       - name: Clone OBS Studio
         run: |
           git clone --depth 1 --branch ${{ env.OBS_VERSION }} https://github.com/obsproject/obs-studio.git obs-src
@@ -62,10 +66,6 @@ jobs:
       - name: Build OBS Studio libobs
         run: |
           cmake --build obs-build --config ${{ env.BUILD_TYPE }} --target libobs --parallel
-
-      - name: Clone oneVPL
-        run: |
-          git clone --depth 1 --branch ${{ env.VPL_VERSION }} https://github.com/oneapi-src/oneVPL.git libvpl
 
       - name: Configure Plugin
         run: |
