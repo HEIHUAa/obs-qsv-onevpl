@@ -9,6 +9,7 @@ on:
 env:
   BUILD_TYPE: RelWithDebInfo
   VPL_VERSION: v2.12.0
+  OBS_VERSION: 31.0.2
 
 jobs:
   build-windows:
@@ -24,37 +25,60 @@ jobs:
       - name: Setup MSVC
         uses: ilammy/msvc-dev-cmd@v1
 
-      - name: Setup vcpkg
+      - name: Download OBS Studio dependencies
         run: |
-          $env:VCPKG_ROOT = Join-Path $env:GITHUB_WORKSPACE "vcpkg"
-          git clone https://github.com/microsoft/vcpkg.git $env:VCPKG_ROOT
-          & (Join-Path $env:VCPKG_ROOT "bootstrap-vcpkg.bat")
-          & (Join-Path $env:VCPKG_ROOT "vcpkg") integrate install
-          & (Join-Path $env:VCPKG_ROOT "vcpkg") install libobs:x64-windows
+          $obsDepsUrl = "https://github.com/obsproject/obs-deps/releases/download/2025-08-23/windows-deps-2025-08-23-x64.zip"
+          New-Item -ItemType Directory -Force -Path deps
+          Invoke-WebRequest -Uri $obsDepsUrl -OutFile "obs-deps.zip"
+          Expand-Archive -Path "obs-deps.zip" -DestinationPath "deps" -Force
+
+      - name: Set environment variables
+        run: |
+          Add-Content -Path $env:GITHUB_ENV -Value "OBS_DEPS_DIR=$PWD/deps"
+          Add-Content -Path $env:GITHUB_ENV -Value "CMAKE_PREFIX_PATH=$PWD/deps"
+
+      - name: Clone OBS Studio
+        run: |
+          if (Test-Path obs-studio) { Remove-Item obs-studio -Recurse -Force }
+          git clone --depth 1 --branch ${{ env.OBS_VERSION }} https://github.com/obsproject/obs-studio.git obs-studio
 
       - name: Clone oneVPL
         run: |
           if (Test-Path libvpl) { Remove-Item libvpl -Recurse -Force }
           git clone --depth 1 --branch ${{ env.VPL_VERSION }} https://github.com/oneapi-src/oneVPL.git libvpl
 
-      - name: Configure CMake
+      - name: Configure OBS Studio
         run: |
-          $env:VCPKG_ROOT = Join-Path $env:GITHUB_WORKSPACE "vcpkg"
+          cmake -B obs-build -G "Visual Studio 17 2022" -A x64 `
+            -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} `
+            -DCMAKE_PREFIX_PATH="${{ env.OBS_DEPS_DIR }}" `
+            -DBUILD_TESTS=OFF `
+            -DBUILD_BROWSER=OFF `
+            -DBUILD_SPARKLE_SUPPORT=OFF `
+            -DENABLE_SCRIPTING=OFF `
+            -DENABLE_WAYLAND=OFF `
+            -DENABLE_X264=ON
+
+      - name: Build OBS Studio
+        run: cmake --build obs-build --config ${{ env.BUILD_TYPE }} --parallel
+
+      - name: Configure Plugin
+        run: |
           cmake -B build -G "Visual Studio 17 2022" -A x64 `
             -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} `
-            -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" `
+            -DCMAKE_PREFIX_PATH="${{ env.OBS_DEPS_DIR }};$PWD/obs-build/libobs/${{ env.BUILD_TYPE }}" `
             -DBUILD_TOOLS=OFF `
             -DBUILD_TESTS=OFF `
             -DBUILD_EXAMPLES=OFF
 
-      - name: Build
+      - name: Build Plugin
         run: cmake --build build --config ${{ env.BUILD_TYPE }} --parallel
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: obs-qsvonevpl-windows-x64
-          path: build/obs-qsvonevpl/RelWithDebInfo/obs-qsvonevpl.dll
+          path: build/obs-qsvonevpl/${{ env.BUILD_TYPE }}/obs-qsvonevpl.dll
           retention-days: 14
 
   build-linux:
