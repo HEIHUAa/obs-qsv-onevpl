@@ -25,11 +25,11 @@ jobs:
         uses: ilammy/msvc-dev-cmd@v1
 
       - name: Setup vcpkg
-        uses: lukka/run-vcpkg@v11
-        with:
-          vcpkgDirectory: ${{ github.workspace }}/vcpkg
-          vcpkgArguments: install obs-libs:x64-windows
-          vcpkgGitCommitish: 7a6a923c6a3ddb1da92bc06af94e579c8eed0bab
+        run: |
+          git clone https://github.com/microsoft/vcpkg.git "${{ github.workspace }}/vcpkg"
+          "${{ github.workspace }}/vcpkg/bootstrap-vcpkg.bat"
+          "${{ github.workspace }}/vcpkg/vcpkg" integrate install
+          "${{ github.workspace }}/vcpkg/vcpkg" install libobs:x64-windows
 
       - name: Clone oneVPL
         run: |
