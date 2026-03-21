@@ -1,144 +1,190 @@
-name: Build
+name: Build OBS QSV oneVPL Plugin
 
 on:
   push:
-    branches: [main, master]
+    branches:
+      - main
+      - master
+    tags:
+      - 'v*'
   pull_request:
-    branches: [main, master]
+    branches:
+      - main
+      - master
+  workflow_dispatch:
 
 env:
-  BUILD_TYPE: RelWithDebInfo
-  VPL_VERSION: v2.12.0
-  OBS_VERSION: 32.0.4
+  PLUGIN_NAME: obs-qsvonevpl
 
 jobs:
   build-windows:
-    name: Windows x64
     runs-on: windows-2022
-
+    strategy:
+      matrix:
+        arch: [x64]
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          submodules: true
-          fetch-depth: 1
+          submodules: recursive
+          fetch-depth: 0
 
       - name: Setup MSVC
         uses: ilammy/msvc-dev-cmd@v1
-
-      - name: Download OBS dependencies
-        run: |
-          $depsUrl = "https://github.com/obsproject/obs-deps/releases/download/2025-08-23/windows-deps-2025-08-23-x64.zip"
-          Invoke-WebRequest -Uri $depsUrl -OutFile obs-deps.zip
-          Expand-Archive -Path obs-deps.zip -DestinationPath .deps -Force
-
-      - name: Set OBS deps path
-        run: |
-          echo "OBS_DEPS_DIR=$PWD/.deps" | Out-File -FilePath $env:GITHUB_ENV -Encoding UTF8 -Append
-
-      - name: Clone oneVPL
-        run: |
-          git clone --depth 1 --branch ${{ env.VPL_VERSION }} https://github.com/oneapi-src/oneVPL.git libvpl
-
-      - name: Clone OBS Studio
-        run: |
-          git clone --depth 1 --branch ${{ env.OBS_VERSION }} --recurse-submodules --shallow-submodules https://github.com/obsproject/obs-studio.git obs-src
-
-      - name: Cache OBS Studio build
-        id: cache-obs
-        uses: actions/cache@v4
         with:
-          path: |
-            .deps
-            obs-build
-            obs-install
-          key: obs-${{ env.OBS_VERSION }}-${{ env.BUILD_TYPE }}-${{ hashFiles('obs-src/CMakeLists.txt', 'obs-src/cmake/**/*.cmake') }}
-          restore-keys: |
-            obs-${{ env.OBS_VERSION }}-${{ env.BUILD_TYPE }}-
+          arch: ${{ matrix.arch }}
 
-      - name: Configure OBS Studio
-        run: |
-          if (Test-Path obs-build) { Remove-Item -Recurse -Force obs-build }
-          cmake -S obs-src -B obs-build -G "Visual Studio 17 2022" -A x64 `
-            -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} `
-            -DCMAKE_PREFIX_PATH="$env:OBS_DEPS_DIR" `
-            -DBUILD_TESTS=OFF `
-            -DBUILD_BROWSER=OFF `
-            -DBUILD_SPARKLE_SUPPORT=OFF `
-            -DENABLE_SCRIPTING=OFF `
-            -DENABLE_WAYLAND=OFF `
-            -DENABLE_VLC=OFF `
-            -DENABLE_AOM=OFF `
-            -DENABLE_SRT=OFF `
-            -DENABLE_LIBRIST=OFF `
-            -DENABLE_RIST=OFF `
-            -DENABLE_X264=OFF `
-            -DENABLE_FFMPEG=OFF
+      - name: Setup CMake
+        uses: lukka/get-cmake@latest
 
-      - name: Build OBS Studio
-        run: |
-          cmake --build obs-build --config ${{ env.BUILD_TYPE }} --parallel 4
+      - name: Setup vcpkg
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgGitCommitId: 'a34c873a9717a888f58dc05268dea15592c2f0ff'
+          vcpkgJsonGlob: '**/vcpkg.json'
 
-      - name: Install OBS Studio to local directory
+      - name: Install OBS Studio
+        shell: pwsh
         run: |
-          cmake --install obs-build --config ${{ env.BUILD_TYPE }} --prefix obs-install
+          $obsVersion = "30.1.2"
+          $obsUrl = "https://github.com/obsproject/obs-studio/releases/download/${obsVersion}/OBS-Studio-${obsVersion}-Windows.zip"
+          Invoke-WebRequest -Uri $obsUrl -OutFile obs-studio.zip
+          Expand-Archive -Path obs-studio.zip -DestinationPath obs-studio
+          
+          $obsPath = "${{ github.workspace }}/obs-studio/OBS-Studio-${obsVersion}-Windows"
+          echo "OBS_PATH=${obsPath}" >> $env:GITHUB_ENV
 
-      - name: Check obs-build for cmake config
+      - name: Configure CMake
+        shell: pwsh
         run: |
-          echo "=== Looking for cmake files in obs-build ==="
-          Get-ChildItem -Path obs-build -Recurse -Filter "libobs*.cmake" -ErrorAction SilentlyContinue | Select-Object FullName
-          Get-ChildItem -Path obs-build -Recurse -Filter "OBS*.cmake" -ErrorAction SilentlyContinue | Select-Object FullName
-          echo "=== Looking for cmake config in obs-build/libobs ==="
-          if (Test-Path obs-build/libobs) {
-            Get-ChildItem -Path obs-build/libobs -Recurse -Filter "*.cmake" -ErrorAction SilentlyContinue | Select-Object FullName
+          cmake -B build `
+            -S . `
+            -G "Visual Studio 17 2022" `
+            -A ${{ matrix.arch }} `
+            -DCMAKE_BUILD_TYPE=RelWithDebInfo `
+            -DCMAKE_INSTALL_PREFIX="${{ github.workspace }}/install" `
+            -Dlibobs_DIR="${{ env.OBS_PATH }}/cmake" `
+            -DENABLE_HEVC=ON `
+            -DBUILD_TESTS=OFF
+
+      - name: Build
+        shell: pwsh
+        run: |
+          cmake --build build --config RelWithDebInfo --parallel
+
+      - name: Install
+        shell: pwsh
+        run: |
+          cmake --install build --config RelWithDebInfo
+
+      - name: Prepare package
+        shell: pwsh
+        run: |
+          $packageDir = "${{ github.workspace }}/package"
+          New-Item -ItemType Directory -Path $packageDir -Force
+          
+          Copy-Item -Path "${{ github.workspace }}/install/bin/*${{ env.PLUGIN_NAME }}*.dll" -Destination $packageDir -Force
+          Copy-Item -Path "${{ github.workspace }}/install/bin/*${{ env.PLUGIN_NAME }}*.pdb" -Destination $packageDir -Force -ErrorAction SilentlyContinue
+          
+          if (Test-Path "${{ github.workspace }}/obs-qsvonevpl/data") {
+            Copy-Item -Path "${{ github.workspace }}/obs-qsvonevpl/data" -Destination $packageDir -Recurse -Force
           }
-          echo "=== obs-install contents ==="
-          Get-ChildItem -Path obs-install -Recurse -Depth 3 -ErrorAction SilentlyContinue | Select-Object FullName
 
-      - name: Configure Plugin
-        run: |
-          cmake -B build -G "Visual Studio 17 2022" -A x64 `
-            -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} `
-            -DCMAKE_PREFIX_PATH="$PWD/.deps;$PWD/obs-build/libobs;$PWD/libvpl" `
-            -DBUILD_TOOLS=OFF `
-            -DBUILD_TESTS=OFF `
-            -DBUILD_EXAMPLES=OFF
-
-      - name: Build Plugin
-        run: |
-          cmake --build build --config ${{ env.BUILD_TYPE }} --parallel
-
-      - name: Upload artifact
+      - name: Create artifact
         uses: actions/upload-artifact@v4
         with:
-          name: obs-qsvonevpl-windows-x64
-          path: build/obs-qsvonevpl/${{ env.BUILD_TYPE }}/obs-qsvonevpl.dll
-          retention-days: 14
+          name: ${{ env.PLUGIN_NAME }}-windows-${{ matrix.arch }}
+          path: ${{ github.workspace }}/package/*
+          retention-days: 30
 
   build-linux:
-    name: Linux x64
-    runs-on: ubuntu-24.04
-
+    runs-on: ubuntu-22.04
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          submodules: true
+          submodules: recursive
+          fetch-depth: 0
 
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y cmake libobs-dev libd3d11-dev dxgi-dev libpulse-dev
+          sudo apt-get install -y \
+            build-essential \
+            cmake \
+            ninja-build \
+            pkg-config \
+            libobs-dev \
+            libva-dev \
+            libdrm-dev \
+            libwayland-dev \
+            libx11-dev \
+            libvpl-dev
 
       - name: Configure CMake
-        run: cmake -B build -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }}
+        run: |
+          cmake -B build \
+            -S . \
+            -G Ninja \
+            -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -DCMAKE_INSTALL_PREFIX="${{ github.workspace }}/install" \
+            -DENABLE_HEVC=ON \
+            -DBUILD_TESTS=OFF
 
       - name: Build
-        run: cmake --build build --parallel
+        run: |
+          cmake --build build --config RelWithDebInfo --parallel
 
-      - name: Upload artifact
+      - name: Install
+        run: |
+          cmake --install build --config RelWithDebInfo
+
+      - name: Prepare package
+        run: |
+          mkdir -p package
+          cp -v install/lib/*${{ env.PLUGIN_NAME }}*.so package/ || true
+          
+          if [ -d "obs-qsvonevpl/data" ]; then
+            cp -rv obs-qsvonevpl/data package/
+          fi
+
+      - name: Create artifact
         uses: actions/upload-artifact@v4
         with:
-          name: obs-qsvonevpl-linux-x64
-          path: build/obs-qsvonevpl/*.so
-          retention-days: 14
+          name: ${{ env.PLUGIN_NAME }}-linux-x64
+          path: package/*
+          retention-days: 30
+
+  release:
+    needs: [build-windows, build-linux]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
+    steps:
+      - name: Download Windows artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ env.PLUGIN_NAME }}-windows-x64
+          path: windows-x64
+
+      - name: Download Linux artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ env.PLUGIN_NAME }}-linux-x64
+          path: linux-x64
+
+      - name: Create release archives
+        run: |
+          cd windows-x64 && zip -r ../${{ env.PLUGIN_NAME }}-windows-x64.zip . && cd ..
+          cd linux-x64 && tar -czvf ../${{ env.PLUGIN_NAME }}-linux-x64.tar.gz . && cd ..
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            ${{ env.PLUGIN_NAME }}-windows-x64.zip
+            ${{ env.PLUGIN_NAME }}-linux-x64.tar.gz
+          generate_release_notes: true
+          draft: false
+          prerelease: false
