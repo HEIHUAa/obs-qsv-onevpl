@@ -64,7 +64,7 @@ jobs:
 
       - name: Build OBS Studio
         run: |
-          cmake --build obs-build --config ${{ env.BUILD_TYPE }} --parallel /p:TreatWarningAsErrors=false
+          cmake --build obs-build --config ${{ env.BUILD_TYPE }} --parallel 4 -- /p:TreatWarningAsErrors=false
 
       - name: Install OBS Studio to local directory
         run: |
