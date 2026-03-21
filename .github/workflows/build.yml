@@ -87,7 +87,7 @@ jobs:
         run: |
           cmake -B build -G "Visual Studio 17 2022" -A x64 `
             -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} `
-            -DCMAKE_PREFIX_PATH="$PWD/obs-install;$PWD/libvpl" `
+            -DCMAKE_PREFIX_PATH="$PWD/obs-build/libobs;$PWD/libvpl" `
             -DBUILD_TOOLS=OFF `
             -DBUILD_TESTS=OFF `
             -DBUILD_EXAMPLES=OFF
