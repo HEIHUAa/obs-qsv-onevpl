@@ -5,9 +5,7 @@ project(obs-qsv-onevpl
   LANGUAGES CXX
 )
 
-# If building as subdirectory..
 if(NOT PROJECT_IS_TOP_LEVEL)
-  # Remove warnings as errors, needed for in-OBS builds
   if(UNIX)
     add_compile_options(-Wno-error)
   elseif(WIN32)
@@ -16,13 +14,16 @@ if(NOT PROJECT_IS_TOP_LEVEL)
 endif()
 
 if(WIN32)
-# VPL
-set(BUILD_TOOLS OFF CACHE BOOL "" FORCE)
-add_subdirectory(libvpl)
+  if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/oneVPL/CMakeLists.txt")
+    set(BUILD_TOOLS OFF CACHE BOOL "" FORCE)
+    add_subdirectory(oneVPL)
+  elseif(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/libvpl/CMakeLists.txt")
+    set(BUILD_TOOLS OFF CACHE BOOL "" FORCE)
+    add_subdirectory(libvpl)
+  else()
+    find_package(VPL REQUIRED)
+  endif()
 endif()
 
-# VPL-private (experimental / hidden stuff)
 add_subdirectory(libvpl-private)
-
-# Actual plugin
 add_subdirectory(obs-qsvonevpl)

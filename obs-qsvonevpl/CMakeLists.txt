@@ -3,7 +3,10 @@ option(ENABLE_HEVC "Enable HEVC support" ON)
 add_library(obs-qsvonevpl MODULE)
 
 find_package(VPL CONFIG)
-find_package(libobs CONFIG)
+
+if(NOT TARGET OBS::libobs)
+  find_package(libobs CONFIG REQUIRED)
+endif()
 
 target_sources(
   obs-qsvonevpl

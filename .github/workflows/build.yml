@@ -16,6 +16,8 @@ on:
 env:
   PLUGIN_NAME: obs-qsvonevpl
   PLUGIN_VERSION: 1.2.0
+  OBS_VERSION: 31.0.2
+  OBS_DEPS_VERSION: 2025-08-23
 
 jobs:
   check-event:
@@ -55,13 +57,41 @@ jobs:
         shell: pwsh
         run: |
           $DepsBase = "https://github.com/obsproject/obs-deps/releases/download"
-          $DepsVersion = "2025-08-23"
           
           Write-Host "Downloading Windows deps..."
-          Invoke-WebRequest -Uri "${DepsBase}/${DepsVersion}/windows-deps-${DepsVersion}-x64.zip" -OutFile "deps.zip"
+          Invoke-WebRequest -Uri "${DepsBase}/${{ env.OBS_DEPS_VERSION }}/windows-deps-${{ env.OBS_DEPS_VERSION }}-x64.zip" -OutFile "deps.zip"
           Expand-Archive -Path "deps.zip" -DestinationPath "deps"
 
-      - name: Configure CMake
+      - name: Download and Build OBS Studio
+        shell: pwsh
+        run: |
+          Write-Host "Downloading OBS Studio source..."
+          Invoke-WebRequest -Uri "https://github.com/obsproject/obs-studio/archive/refs/tags/${{ env.OBS_VERSION }}.zip" -OutFile "obs-src.zip"
+          Expand-Archive -Path "obs-src.zip" -DestinationPath "obs-src"
+          
+          $obsDir = "obs-src/obs-studio-${{ env.OBS_VERSION }}"
+          
+          Write-Host "Configuring OBS Studio..."
+          cmake -S "$obsDir" -B "$obsDir/build_x64" `
+            -G "Visual Studio 17 2022" -A x64 `
+            -DCMAKE_BUILD_TYPE=Debug `
+            -DCMAKE_INSTALL_PREFIX="${{ github.workspace }}/obs-install" `
+            -DCMAKE_PREFIX_PATH="${{ github.workspace }}/deps" `
+            -DENABLE_PLUGINS=OFF `
+            -DENABLE_UI=OFF `
+            -DENABLE_SCRIPTING=OFF `
+            -DENABLE_AJA=OFF `
+            -DENABLE_WEBRTC=OFF `
+            -DENABLE_NEW_MPEGTS_OUTPUT=OFF
+          
+          Write-Host "Building OBS Studio libobs..."
+          cmake --build "$obsDir/build_x64" --config Debug --target obs-frontend-api --parallel
+          cmake --build "$obsDir/build_x64" --config Debug --target libobs --parallel
+          
+          Write-Host "Installing OBS Studio..."
+          cmake --install "$obsDir/build_x64" --config Debug --prefix "${{ github.workspace }}/obs-install"
+
+      - name: Configure Plugin
         shell: pwsh
         run: |
           cmake -B build `
@@ -70,15 +100,15 @@ jobs:
             -A x64 `
             -DCMAKE_BUILD_TYPE=${{ needs.check-event.outputs.config }} `
             -DCMAKE_INSTALL_PREFIX="${{ github.workspace }}/install" `
-            -DCMAKE_PREFIX_PATH="${{ github.workspace }}/deps" `
+            -DCMAKE_PREFIX_PATH="${{ github.workspace }}/deps;${{ github.workspace }}/obs-install" `
             -DENABLE_HEVC=ON
 
-      - name: Build
+      - name: Build Plugin
         shell: pwsh
         run: |
           cmake --build build --config ${{ needs.check-event.outputs.config }} --parallel
 
-      - name: Install
+      - name: Install Plugin
         shell: pwsh
         run: |
           cmake --install build --config ${{ needs.check-event.outputs.config }}
@@ -88,7 +118,11 @@ jobs:
         run: |
           New-Item -ItemType Directory -Path package -Force
           
-          Get-ChildItem -Path install -Recurse -Include "*.dll","*.pdb" | ForEach-Object {
+          Get-ChildItem -Path install -Recurse -Include "*.dll","*.pdb" -ErrorAction SilentlyContinue | ForEach-Object {
+            Copy-Item $_.FullName package -Force
+          }
+          
+          Get-ChildItem -Path build -Recurse -Include "*${{ env.PLUGIN_NAME }}*.dll","*${{ env.PLUGIN_NAME }}*.pdb" -ErrorAction SilentlyContinue | ForEach-Object {
             Copy-Item $_.FullName package -Force
           }
           
@@ -128,22 +162,59 @@ jobs:
             libwayland-dev \
             libx11-dev \
             libvpl-dev \
-            libpci-dev
+            libpci-dev \
+            libfftw3-dev \
+            libcurl4-openssl-dev \
+            libluajit-5.1-dev \
+            libpython3-dev \
+            libswresample-dev \
+            libavcodec-dev \
+            libavformat-dev \
+            libavutil-dev \
+            libswscale-dev
 
-      - name: Configure CMake
+      - name: Download and Build OBS Studio
+        run: |
+          echo "Downloading OBS Studio source..."
+          wget -q "https://github.com/obsproject/obs-studio/archive/refs/tags/${{ env.OBS_VERSION }}.tar.gz" -O obs-src.tar.gz
+          tar -xzf obs-src.tar.gz
+          
+          obsDir="obs-studio-${{ env.OBS_VERSION }}"
+          
+          echo "Configuring OBS Studio..."
+          cmake -S "$obsDir" -B "$obsDir/build" \
+            -G Ninja \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_INSTALL_PREFIX="${{ github.workspace }}/obs-install" \
+            -DENABLE_PLUGINS=OFF \
+            -DENABLE_UI=OFF \
+            -DENABLE_SCRIPTING=OFF \
+            -DENABLE_AJA=OFF \
+            -DENABLE_WEBRTC=OFF \
+            -DENABLE_NEW_MPEGTS_OUTPUT=OFF
+          
+          echo "Building OBS Studio libobs..."
+          cmake --build "$obsDir/build" --target obs-frontend-api --parallel
+          cmake --build "$obsDir/build" --target libobs --parallel
+          
+          echo "Installing OBS Studio..."
+          cmake --install "$obsDir/build" --prefix "${{ github.workspace }}/obs-install"
+
+      - name: Configure Plugin
         run: |
           cmake -B build \
             -S . \
             -G Ninja \
             -DCMAKE_BUILD_TYPE=${{ needs.check-event.outputs.config }} \
             -DCMAKE_INSTALL_PREFIX="${{ github.workspace }}/install" \
+            -DCMAKE_PREFIX_PATH="${{ github.workspace }}/obs-install" \
             -DENABLE_HEVC=ON
 
-      - name: Build
+      - name: Build Plugin
         run: |
           cmake --build build --parallel
 
-      - name: Install
+      - name: Install Plugin
         run: |
           cmake --install build
 
@@ -152,6 +223,8 @@ jobs:
           mkdir -p package
           
           find install -name "*.so" -exec cp -v {} package/ \;
+          
+          find build -name "*${{ env.PLUGIN_NAME }}*.so" -exec cp -v {} package/ \;
           
           if [ -d "obs-qsvonevpl/data" ]; then
             cp -rv obs-qsvonevpl/data package/
