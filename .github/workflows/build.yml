@@ -101,8 +101,15 @@ jobs:
           Copy-Item "$obsDir/build_x64/UI/obs-frontend-api/Debug/obs-frontend-api.dll" "$installDir/bin/64bit/" -Force -ErrorAction SilentlyContinue
           Copy-Item "$obsDir/build_x64/UI/obs-frontend-api/Debug/obs-frontend-api.pdb" "$installDir/bin/64bit/" -Force -ErrorAction SilentlyContinue
           
-          Copy-Item "$obsDir/build_x64/libobs/obs.lib" "$installDir/lib/" -Force
-          Copy-Item "$obsDir/build_x64/UI/obs-frontend-api/obs-frontend-api.lib" "$installDir/lib/" -Force -ErrorAction SilentlyContinue
+          $libFiles = Get-ChildItem -Path "$obsDir/build_x64/libobs" -Filter "*.lib" -Recurse
+          foreach ($libFile in $libFiles) {
+            Copy-Item $libFile.FullName "$installDir/lib/" -Force
+          }
+          
+          $apiLibFiles = Get-ChildItem -Path "$obsDir/build_x64/UI/obs-frontend-api" -Filter "*.lib" -Recurse
+          foreach ($libFile in $apiLibFiles) {
+            Copy-Item $libFile.FullName "$installDir/lib/" -Force
+          }
           
           Copy-Item -Path "$obsDir/libobs" -Destination "$installDir/include/libobs" -Recurse -Force
           Copy-Item -Path "$obsDir/UI/obs-frontend-api" -Destination "$installDir/include/obs-frontend-api" -Recurse -Force
@@ -110,6 +117,9 @@ jobs:
           Copy-Item -Path "$obsDir/build_x64/libobs/cmake" -Destination "$installDir/lib/cmake/libobs" -Recurse -Force -ErrorAction SilentlyContinue
           
           Copy-Item -Path "$obsDir/data/libobs" -Destination "$installDir/data/" -Recurse -Force -ErrorAction SilentlyContinue
+          
+          Write-Host "Installed files:"
+          Get-ChildItem -Path $installDir -Recurse | Select-Object FullName
 
       - name: Configure Plugin
         shell: pwsh
@@ -157,72 +167,9 @@ jobs:
           path: package/*
           retention-days: 30
 
-  build-linux:
-    name: Build for Linux
-    runs-on: ubuntu-24.04
-    needs: check-event
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          submodules: recursive
-          fetch-depth: 0
-
-      - name: Install dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            build-essential \
-            cmake \
-            ninja-build \
-            pkg-config \
-            libobs-dev \
-            libva-dev \
-            libdrm-dev \
-            libwayland-dev \
-            libx11-dev \
-            libvpl-dev \
-            libpci-dev
-
-      - name: Configure Plugin
-        run: |
-          cmake -B build \
-            -S . \
-            -G Ninja \
-            -DCMAKE_BUILD_TYPE=${{ needs.check-event.outputs.config }} \
-            -DCMAKE_INSTALL_PREFIX="${{ github.workspace }}/install" \
-            -DENABLE_HEVC=ON
-
-      - name: Build Plugin
-        run: |
-          cmake --build build --parallel
-
-      - name: Install Plugin
-        run: |
-          cmake --install build
-
-      - name: Prepare package
-        run: |
-          mkdir -p package
-          
-          find install -name "*.so" -exec cp -v {} package/ \;
-          
-          find build -name "*${{ env.PLUGIN_NAME }}*.so" -exec cp -v {} package/ \;
-          
-          if [ -d "obs-qsvonevpl/data" ]; then
-            cp -rv obs-qsvonevpl/data package/
-          fi
-
-      - name: Upload Artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ env.PLUGIN_NAME }}-${{ env.PLUGIN_VERSION }}-linux-x64-${{ needs.check-event.outputs.commitHash }}
-          path: package/*
-          retention-days: 30
-
   release:
     name: Create Release
-    needs: [check-event, build-windows, build-linux]
+    needs: [check-event, build-windows]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
     permissions:
@@ -234,23 +181,15 @@ jobs:
           name: ${{ env.PLUGIN_NAME }}-${{ env.PLUGIN_VERSION }}-windows-x64-${{ needs.check-event.outputs.commitHash }}
           path: windows-x64
 
-      - name: Download Linux artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: ${{ env.PLUGIN_NAME }}-${{ env.PLUGIN_VERSION }}-linux-x64-${{ needs.check-event.outputs.commitHash }}
-          path: linux-x64
-
       - name: Create release archives
         run: |
           cd windows-x64 && zip -r ../${{ env.PLUGIN_NAME }}-${{ env.PLUGIN_VERSION }}-windows-x64.zip . && cd ..
-          cd linux-x64 && tar -czvf ../${{ env.PLUGIN_NAME }}-${{ env.PLUGIN_VERSION }}-linux-x64.tar.gz . && cd ..
 
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
           files: |
             ${{ env.PLUGIN_NAME }}-${{ env.PLUGIN_VERSION }}-windows-x64.zip
-            ${{ env.PLUGIN_NAME }}-${{ env.PLUGIN_VERSION }}-linux-x64.tar.gz
           generate_release_notes: true
           draft: false
           prerelease: false
