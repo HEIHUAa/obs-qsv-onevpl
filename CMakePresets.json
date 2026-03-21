@@ -14,6 +14,56 @@
       "cacheVariables": {
         "ENABLE_HEVC": "ON"
       }
+    },
+    {
+      "name": "windows-x64",
+      "displayName": "Windows x64",
+      "description": "Windows 64-bit build",
+      "inherits": "any-x64",
+      "binaryDir": "${sourceDir}/build_x64",
+      "generator": "Visual Studio 17 2022",
+      "architecture": {
+        "value": "x64",
+        "strategy": "set"
+      },
+      "cacheVariables": {
+        "ENABLE_HEVC": "ON",
+        "CMAKE_INSTALL_PREFIX": "${sourceDir}/release"
+      }
+    },
+    {
+      "name": "windows-ci-x64",
+      "displayName": "Windows CI x64",
+      "description": "Windows CI 64-bit build",
+      "inherits": "windows-x64",
+      "cacheVariables": {
+        "ENABLE_HEVC": "ON",
+        "CMAKE_INSTALL_PREFIX": "${sourceDir}/release/RelWithDebInfo"
+      }
+    },
+    {
+      "name": "linux-x64",
+      "displayName": "Linux x64",
+      "description": "Linux 64-bit build",
+      "inherits": "any-x64",
+      "binaryDir": "${sourceDir}/build_x64",
+      "generator": "Ninja",
+      "cacheVariables": {
+        "ENABLE_HEVC": "ON",
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+        "CMAKE_INSTALL_PREFIX": "${sourceDir}/release"
+      }
+    },
+    {
+      "name": "linux-ci-x64",
+      "displayName": "Linux CI x64",
+      "description": "Linux CI 64-bit build",
+      "inherits": "linux-x64",
+      "cacheVariables": {
+        "ENABLE_HEVC": "ON",
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+        "CMAKE_INSTALL_PREFIX": "${sourceDir}/release/RelWithDebInfo"
+      }
     }
   ],
   "buildPresets": [
@@ -22,6 +72,20 @@
       "configurePreset": "any-x64",
       "displayName": "Any 64-bit",
       "description": "Any build 64-bit",
+      "configuration": "RelWithDebInfo"
+    },
+    {
+      "name": "windows-x64",
+      "configurePreset": "windows-x64",
+      "displayName": "Windows 64-bit",
+      "description": "Windows build 64-bit",
+      "configuration": "RelWithDebInfo"
+    },
+    {
+      "name": "linux-x64",
+      "configurePreset": "linux-x64",
+      "displayName": "Linux 64-bit",
+      "description": "Linux build 64-bit",
       "configuration": "RelWithDebInfo"
     }
   ]

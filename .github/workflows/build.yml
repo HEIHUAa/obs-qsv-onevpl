@@ -15,13 +15,30 @@ on:
 
 env:
   PLUGIN_NAME: obs-qsvonevpl
+  PLUGIN_VERSION: 1.2.0
 
 jobs:
+  check-event:
+    name: Check Event
+    runs-on: ubuntu-latest
+    outputs:
+      config: ${{ steps.setup.outputs.config }}
+      commitHash: ${{ steps.setup.outputs.commitHash }}
+    steps:
+      - name: Setup Environment
+        id: setup
+        run: |
+          if [[ "${{ startsWith(github.ref, 'refs/tags/') }}" == "true" ]]; then
+            echo "config=Release" >> $GITHUB_OUTPUT
+          else
+            echo "config=RelWithDebInfo" >> $GITHUB_OUTPUT
+          fi
+          echo "commitHash=$(echo ${{ github.sha }} | cut -c1-8)" >> $GITHUB_OUTPUT
+
   build-windows:
+    name: Build for Windows
     runs-on: windows-2022
-    strategy:
-      matrix:
-        arch: [x64]
+    needs: check-event
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -32,27 +49,17 @@ jobs:
       - name: Setup MSVC
         uses: ilammy/msvc-dev-cmd@v1
         with:
-          arch: ${{ matrix.arch }}
+          arch: x64
 
-      - name: Setup CMake
-        uses: lukka/get-cmake@latest
-
-      - name: Setup vcpkg
-        uses: lukka/run-vcpkg@v11
-        with:
-          vcpkgGitCommitId: 'a34c873a9717a888f58dc05268dea15592c2f0ff'
-          vcpkgJsonGlob: '**/vcpkg.json'
-
-      - name: Install OBS Studio
+      - name: Download OBS Dependencies
         shell: pwsh
         run: |
-          $obsVersion = "30.1.2"
-          $obsUrl = "https://github.com/obsproject/obs-studio/releases/download/${obsVersion}/OBS-Studio-${obsVersion}-Windows.zip"
-          Invoke-WebRequest -Uri $obsUrl -OutFile obs-studio.zip
-          Expand-Archive -Path obs-studio.zip -DestinationPath obs-studio
+          $DepsBase = "https://github.com/obsproject/obs-deps/releases/download"
+          $DepsVersion = "2025-08-23"
           
-          $obsPath = "${{ github.workspace }}/obs-studio/OBS-Studio-${obsVersion}-Windows"
-          echo "OBS_PATH=${obsPath}" >> $env:GITHUB_ENV
+          Write-Host "Downloading Windows deps..."
+          Invoke-WebRequest -Uri "${DepsBase}/${DepsVersion}/windows-deps-${DepsVersion}-x64.zip" -OutFile "deps.zip"
+          Expand-Archive -Path "deps.zip" -DestinationPath "deps"
 
       - name: Configure CMake
         shell: pwsh
@@ -60,45 +67,46 @@ jobs:
           cmake -B build `
             -S . `
             -G "Visual Studio 17 2022" `
-            -A ${{ matrix.arch }} `
-            -DCMAKE_BUILD_TYPE=RelWithDebInfo `
+            -A x64 `
+            -DCMAKE_BUILD_TYPE=${{ needs.check-event.outputs.config }} `
             -DCMAKE_INSTALL_PREFIX="${{ github.workspace }}/install" `
-            -Dlibobs_DIR="${{ env.OBS_PATH }}/cmake" `
-            -DENABLE_HEVC=ON `
-            -DBUILD_TESTS=OFF
+            -DCMAKE_PREFIX_PATH="${{ github.workspace }}/deps" `
+            -DENABLE_HEVC=ON
 
       - name: Build
         shell: pwsh
         run: |
-          cmake --build build --config RelWithDebInfo --parallel
+          cmake --build build --config ${{ needs.check-event.outputs.config }} --parallel
 
       - name: Install
         shell: pwsh
         run: |
-          cmake --install build --config RelWithDebInfo
+          cmake --install build --config ${{ needs.check-event.outputs.config }}
 
       - name: Prepare package
         shell: pwsh
         run: |
-          $packageDir = "${{ github.workspace }}/package"
-          New-Item -ItemType Directory -Path $packageDir -Force
+          New-Item -ItemType Directory -Path package -Force
           
-          Copy-Item -Path "${{ github.workspace }}/install/bin/*${{ env.PLUGIN_NAME }}*.dll" -Destination $packageDir -Force
-          Copy-Item -Path "${{ github.workspace }}/install/bin/*${{ env.PLUGIN_NAME }}*.pdb" -Destination $packageDir -Force -ErrorAction SilentlyContinue
+          Get-ChildItem -Path install -Recurse -Include "*.dll","*.pdb" | ForEach-Object {
+            Copy-Item $_.FullName package -Force
+          }
           
-          if (Test-Path "${{ github.workspace }}/obs-qsvonevpl/data") {
-            Copy-Item -Path "${{ github.workspace }}/obs-qsvonevpl/data" -Destination $packageDir -Recurse -Force
+          if (Test-Path "obs-qsvonevpl/data") {
+            Copy-Item -Path "obs-qsvonevpl/data" -Destination package -Recurse -Force
           }
 
-      - name: Create artifact
+      - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ env.PLUGIN_NAME }}-windows-${{ matrix.arch }}
-          path: ${{ github.workspace }}/package/*
+          name: ${{ env.PLUGIN_NAME }}-${{ env.PLUGIN_VERSION }}-windows-x64-${{ needs.check-event.outputs.commitHash }}
+          path: package/*
           retention-days: 30
 
   build-linux:
+    name: Build for Linux
     runs-on: ubuntu-22.04
+    needs: check-event
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -119,44 +127,46 @@ jobs:
             libdrm-dev \
             libwayland-dev \
             libx11-dev \
-            libvpl-dev
+            libvpl-dev \
+            libpci-dev
 
       - name: Configure CMake
         run: |
           cmake -B build \
             -S . \
             -G Ninja \
-            -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -DCMAKE_BUILD_TYPE=${{ needs.check-event.outputs.config }} \
             -DCMAKE_INSTALL_PREFIX="${{ github.workspace }}/install" \
-            -DENABLE_HEVC=ON \
-            -DBUILD_TESTS=OFF
+            -DENABLE_HEVC=ON
 
       - name: Build
         run: |
-          cmake --build build --config RelWithDebInfo --parallel
+          cmake --build build --parallel
 
       - name: Install
         run: |
-          cmake --install build --config RelWithDebInfo
+          cmake --install build
 
       - name: Prepare package
         run: |
           mkdir -p package
-          cp -v install/lib/*${{ env.PLUGIN_NAME }}*.so package/ || true
+          
+          find install -name "*.so" -exec cp -v {} package/ \;
           
           if [ -d "obs-qsvonevpl/data" ]; then
             cp -rv obs-qsvonevpl/data package/
           fi
 
-      - name: Create artifact
+      - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ env.PLUGIN_NAME }}-linux-x64
+          name: ${{ env.PLUGIN_NAME }}-${{ env.PLUGIN_VERSION }}-linux-x64-${{ needs.check-event.outputs.commitHash }}
           path: package/*
           retention-days: 30
 
   release:
-    needs: [build-windows, build-linux]
+    name: Create Release
+    needs: [check-event, build-windows, build-linux]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
     permissions:
@@ -165,26 +175,26 @@ jobs:
       - name: Download Windows artifacts
         uses: actions/download-artifact@v4
         with:
-          name: ${{ env.PLUGIN_NAME }}-windows-x64
+          name: ${{ env.PLUGIN_NAME }}-${{ env.PLUGIN_VERSION }}-windows-x64-${{ needs.check-event.outputs.commitHash }}
           path: windows-x64
 
       - name: Download Linux artifacts
         uses: actions/download-artifact@v4
         with:
-          name: ${{ env.PLUGIN_NAME }}-linux-x64
+          name: ${{ env.PLUGIN_NAME }}-${{ env.PLUGIN_VERSION }}-linux-x64-${{ needs.check-event.outputs.commitHash }}
           path: linux-x64
 
       - name: Create release archives
         run: |
-          cd windows-x64 && zip -r ../${{ env.PLUGIN_NAME }}-windows-x64.zip . && cd ..
-          cd linux-x64 && tar -czvf ../${{ env.PLUGIN_NAME }}-linux-x64.tar.gz . && cd ..
+          cd windows-x64 && zip -r ../${{ env.PLUGIN_NAME }}-${{ env.PLUGIN_VERSION }}-windows-x64.zip . && cd ..
+          cd linux-x64 && tar -czvf ../${{ env.PLUGIN_NAME }}-${{ env.PLUGIN_VERSION }}-linux-x64.tar.gz . && cd ..
 
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
           files: |
-            ${{ env.PLUGIN_NAME }}-windows-x64.zip
-            ${{ env.PLUGIN_NAME }}-linux-x64.tar.gz
+            ${{ env.PLUGIN_NAME }}-${{ env.PLUGIN_VERSION }}-windows-x64.zip
+            ${{ env.PLUGIN_NAME }}-${{ env.PLUGIN_VERSION }}-linux-x64.tar.gz
           generate_release_notes: true
           draft: false
           prerelease: false
