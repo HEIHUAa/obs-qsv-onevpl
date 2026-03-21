@@ -9,7 +9,7 @@ on:
 env:
   BUILD_TYPE: RelWithDebInfo
   VPL_VERSION: v2.12.0
-  OBS_VERSION: 30.2.4
+  OBS_VERSION: 31.0.2
 
 jobs:
   build-windows:
@@ -64,7 +64,7 @@ jobs:
 
       - name: Build OBS Studio
         run: |
-          cmake --build obs-build --config ${{ env.BUILD_TYPE }} --parallel
+          cmake --build obs-build --config ${{ env.BUILD_TYPE }} --parallel /p:TreatWarningAsErrors=false
 
       - name: Install OBS Studio to local directory
         run: |
