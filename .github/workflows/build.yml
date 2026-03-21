@@ -44,6 +44,17 @@ jobs:
         run: |
           git clone --depth 1 --branch ${{ env.OBS_VERSION }} --recurse-submodules --shallow-submodules https://github.com/obsproject/obs-studio.git obs-src
 
+      - name: Cache OBS Studio build
+        id: cache-obs
+        uses: actions/cache@v4
+        with:
+          path: |
+            obs-build
+            obs-install
+          key: obs-${{ env.OBS_VERSION }}-${{ env.BUILD_TYPE }}-${{ hashFiles('obs-src/CMakeLists.txt', 'obs-src/cmake/**/*.cmake') }}
+          restore-keys: |
+            obs-${{ env.OBS_VERSION }}-${{ env.BUILD_TYPE }}-
+
       - name: Configure OBS Studio
         run: |
           if (Test-Path obs-build) { Remove-Item -Recurse -Force obs-build }
